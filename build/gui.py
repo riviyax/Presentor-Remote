@@ -3,6 +3,9 @@ import threading
 import time
 import serial
 import pyautogui
+import os
+import sys
+import socket
 from tkinter import Tk, Canvas, Entry, Button, PhotoImage, messagebox
 from pathlib import Path
 
@@ -20,12 +23,10 @@ def relative_to_assets(path: str) -> Path:
     return ASSETS_PATH / Path(path)
 
 def save_port_input(port_input):
-    """Save port to JSON"""
     with open("port_config.json", "w") as json_file:
         json.dump({"port": port_input}, json_file)
 
 def load_port_input():
-    """Load port from JSON"""
     try:
         with open("port_config.json", "r") as json_file:
             data = json.load(json_file)
@@ -33,14 +34,24 @@ def load_port_input():
     except FileNotFoundError:
         return ""
 
+# ---------------- SINGLE INSTANCE CHECK ----------------
+def check_already_running():
+    """Prevent multiple instances. Creates a local socket lock."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.bind(("127.0.0.1", 65432))
+        return s  # keep socket open to maintain the lock
+    except OSError:
+        messagebox.showinfo("Already Running", "Presenter Remote is already running!")
+        sys.exit()
+
 # ---------------- SERIAL LISTENER ----------------
 def listen_serial(port):
     global STATUS, SERIAL_CONN
     try:
         SERIAL_CONN = serial.Serial(port, 9600, timeout=1)
-        time.sleep(2)  # allow Arduino reset if needed
+        time.sleep(2)
         print(f"[CONNECTED] {port}")
-        # Ensure UI shows online
         window.after(0, lambda: update_status_images(True))
 
         while STATUS:
@@ -50,13 +61,13 @@ def listen_serial(port):
                     continue
                 print("Arduino:", data)
 
-                # PowerPoint commands
+                # PowerPoint + Scroll commands
                 if data == "NEXT":
                     pyautogui.press("right")
                 elif data == "PREVIOUS":
                     pyautogui.press("left")
                 elif data == "START":
-                    pyautogui.press("f5")
+                    os.system('start powerpnt')
                 elif data == "END":
                     pyautogui.press("esc")
                 elif data == "BLACK":
@@ -64,7 +75,17 @@ def listen_serial(port):
                 elif data == "WHITE":
                     pyautogui.press("w")
 
-        # cleanup when loop ends
+                # --- NEW FEATURE: SCROLL CONTROL ---
+                elif data == "UP":
+                    pyautogui.press("up")
+                elif data == "DOWN":
+                    pyautogui.press("down")
+
+                # --- NEW FEATURE: APP LAUNCH ---
+                elif data == "APP":
+                    pyautogui.press("f5")
+
+        # cleanup
         if SERIAL_CONN and SERIAL_CONN.is_open:
             try:
                 SERIAL_CONN.close()
@@ -93,7 +114,6 @@ def start_button_clicked():
         messagebox.showerror("Input Error", "Please enter a valid port.")
         return
 
-    # basic validation
     if not port_input.upper().startswith("COM"):
         messagebox.showerror("Input Error", "Invalid port. Please enter COM1, COM2, COM3 etc.")
         return
@@ -102,9 +122,7 @@ def start_button_clicked():
 
     if not STATUS:
         STATUS = True
-        # show online and swap buttons (do on main thread)
         update_status_images(True)
-        # start serial thread
         SERIAL_THREAD = threading.Thread(target=listen_serial, args=(port_input,), daemon=True)
         SERIAL_THREAD.start()
     else:
@@ -113,8 +131,7 @@ def start_button_clicked():
 def stop_button_clicked():
     global STATUS, SERIAL_CONN
     if STATUS:
-        STATUS = False  # this causes serial loop to exit
-        # close port if open
+        STATUS = False
         try:
             if SERIAL_CONN and SERIAL_CONN.is_open:
                 SERIAL_CONN.close()
@@ -126,51 +143,36 @@ def stop_button_clicked():
         messagebox.showinfo("Info", "Already disconnected.")
 
 def update_status_images(online=False):
-    """Switch between online/offline indicator images and swap Start/Stop buttons.
-       IMPORTANT: this preserves the original UI layout and positions."""
     if online:
-        # show online icon, hide offline icon
         canvas.itemconfig(image_4, state="normal")
         canvas.itemconfig(image_5, state="hidden")
-        # hide start button image and show stop button (same spot)
         button_1.place_forget()
         button_2.place(x=613.0, y=450.0, width=213.09805297851562, height=63.0)
     else:
-        # show offline icon, hide online
         canvas.itemconfig(image_4, state="hidden")
         canvas.itemconfig(image_5, state="normal")
-        # show start button, hide stop
         button_2.place_forget()
         button_1.place(x=613.0, y=450.0, width=213.09805297851562, height=63.0)
 
 # ---------------- UI SETUP ----------------
+lock_socket = check_already_running()  # ensure single instance
+
 window = Tk()
 window.title("Presenter Remote - Made by Riviya_X")
 window.geometry("1071x703")
 window.configure(bg="#FFFFFF")
-# make sure logo.ico exists in same folder or remove this line if not
+
 try:
     window.iconbitmap('logo.ico')
 except:
     pass
 window.resizable(False, False)
 
-# Load saved port
 initial_port = load_port_input()
 
-# Canvas (your original layout)
-canvas = Canvas(
-    window,
-    bg="#FFFFFF",
-    height=703,
-    width=1071,
-    bd=0,
-    highlightthickness=0,
-    relief="ridge"
-)
+canvas = Canvas(window, bg="#FFFFFF", height=703, width=1071, bd=0, highlightthickness=0, relief="ridge")
 canvas.place(x=0, y=0)
 
-# Original images and positions (exactly as you sent originally)
 image_image_1 = PhotoImage(file=relative_to_assets("image_1.png"))
 image_1 = canvas.create_image(535.0, 351.0, image=image_image_1)
 
@@ -187,10 +189,10 @@ image_3 = canvas.create_image(256.0, 251.0, image=image_image_3)
 canvas.create_rectangle(473.0, 63.0, 478.0, 645.0, fill="#FFFFFF", outline="")
 canvas.create_text(535.0, 204.0, anchor="nw", text="STATUS", fill="#FFFFFF", font=("Poppins Bold", 24 * -1))
 
-image_image_4 = PhotoImage(file=relative_to_assets("image_4.png"))  # Online image
+image_image_4 = PhotoImage(file=relative_to_assets("image_4.png"))  # Online
 image_4 = canvas.create_image(709.739990234375, 224.64785766601562, image=image_image_4)
 
-image_image_5 = PhotoImage(file=relative_to_assets("image_5.png"))  # Offline image
+image_image_5 = PhotoImage(file=relative_to_assets("image_5.png"))  # Offline
 image_5 = canvas.create_image(709.739990234375, 222.64785766601562, image=image_image_5)
 
 image_image_6 = PhotoImage(file=relative_to_assets("image_6.png"))
@@ -201,33 +203,17 @@ entry_bg_1 = canvas.create_image(749.0, 347.0, image=entry_image_1)
 
 entry_1 = Entry(bd=0, bg="#FFFFFF", fg="#000716", highlightthickness=0)
 entry_1.place(x=627.0, y=323.0, width=244.0, height=46.0)
-entry_1.insert(0, initial_port)  # Prefill input with loaded port
+entry_1.insert(0, initial_port)
 
 canvas.create_text(559.0, 288.0, anchor="nw", text="PORT:", fill="#FFFFFF", font=("Poppins Medium", 24 * -1))
 
-# Start button (original image, exact place)
 button_image_1 = PhotoImage(file=relative_to_assets("button_1.png"))
-button_1 = Button(
-    image=button_image_1,
-    borderwidth=0,
-    highlightthickness=0,
-    command=start_button_clicked,
-    relief="flat"
-)
+button_1 = Button(image=button_image_1, borderwidth=0, highlightthickness=0, command=start_button_clicked, relief="flat")
 button_1.place(x=613.0, y=450.0, width=213.09805297851562, height=63.0)
 
-# Stop button (your new button_2.png), same place but hidden initially
 button_image_2 = PhotoImage(file=relative_to_assets("button_2.png"))
-button_2 = Button(
-    image=button_image_2,
-    borderwidth=0,
-    highlightthickness=0,
-    command=stop_button_clicked,
-    relief="flat"
-)
-# do not place it now; update_status_images will show/hide appropriately
+button_2 = Button(image=button_image_2, borderwidth=0, highlightthickness=0, command=stop_button_clicked, relief="flat")
 
-# Initial state: Offline
 update_status_images(False)
 
 window.mainloop()
