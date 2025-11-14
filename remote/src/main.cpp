@@ -2,10 +2,14 @@
 #include <IRremote.h>
 
 #define IR_PIN 3
+#define POWER_LED 10   // any free pin
+#define SIGNAL_LED 12
 
 void setup() {
-  pinMode(13, OUTPUT); // Green (POWER MODE)
-  pinMode(12, OUTPUT); // Blue (SIGNAL LIGHT)
+  pinMode(POWER_LED, OUTPUT); // Green (POWER MODE)
+  pinMode(SIGNAL_LED, OUTPUT); // Blue (SIGNAL LIGHT)
+
+  digitalWrite(POWER_LED, HIGH); // POWER ON
 
   Serial.begin(9600);
   IrReceiver.begin(IR_PIN, ENABLE_LED_FEEDBACK);
@@ -13,8 +17,6 @@ void setup() {
 }
 
 void loop() {
-  digitalWrite(13, HIGH); // POWER ON
-
   if (IrReceiver.decode()) {
     uint8_t cmd = IrReceiver.decodedIRData.command;
 
@@ -48,14 +50,23 @@ void loop() {
       } else if (cmd == 0x1C) {         // Example command for MENU
         Serial.println("APP");
       }
+      else if (cmd == 0x19){
+        Serial.println("PAUSE");
+      }
+      else if (cmd == 0x16) {
+        Serial.println("EXIT");
+      }
+      else if (cmd == 0xD) {
+        Serial.println("TASK");
+      }
       else {
         Serial.println("UNKNOWN");
       }
 
       // Blink signal LED
-      digitalWrite(12, HIGH);
+      digitalWrite(SIGNAL_LED, HIGH);
       delay(150);
-      digitalWrite(12, LOW);
+      digitalWrite(SIGNAL_LED, LOW);
     }
 
     IrReceiver.resume(); // Ready for next signal

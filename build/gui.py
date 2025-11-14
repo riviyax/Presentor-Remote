@@ -6,7 +6,7 @@ import pyautogui
 import os
 import sys
 import socket
-from tkinter import Tk, Canvas, Entry, Button, PhotoImage, messagebox
+from tkinter import Tk, Canvas, Entry, Button, PhotoImage, messagebox, Text, Scrollbar, END, DISABLED, NORMAL
 from pathlib import Path
 
 # ---------------- PATH CONFIG ----------------
@@ -45,6 +45,13 @@ def check_already_running():
         messagebox.showinfo("Already Running", "Presenter Remote is already running!")
         sys.exit()
 
+# ---------------- SERIAL OUTPUT APPEND ----------------
+def append_serial_text(message):
+    serial_text.config(state=NORMAL)
+    serial_text.insert(END, message + "\n")
+    serial_text.see(END)  # auto scroll
+    serial_text.config(state=DISABLED)
+
 # ---------------- SERIAL LISTENER ----------------
 def listen_serial(port):
     global STATUS, SERIAL_CONN
@@ -59,7 +66,8 @@ def listen_serial(port):
                 data = SERIAL_CONN.readline().decode(errors="ignore").strip()
                 if not data:
                     continue
-                print("Arduino:", data)
+                # Print to GUI text box
+                print(f"Arduino: {data}")
 
                 # PowerPoint + Scroll commands
                 if data == "NEXT":
@@ -74,16 +82,19 @@ def listen_serial(port):
                     pyautogui.press("b")
                 elif data == "WHITE":
                     pyautogui.press("w")
-
-                # --- NEW FEATURE: SCROLL CONTROL ---
                 elif data == "UP":
                     pyautogui.press("up")
                 elif data == "DOWN":
                     pyautogui.press("down")
-
-                # --- NEW FEATURE: APP LAUNCH ---
                 elif data == "APP":
                     pyautogui.press("f5")
+                elif data == "EXIT":
+                    pyautogui.hotkey('alt', 'f4', interval=0.1)
+                elif data == "PAUSE":
+                    pyautogui.press("space")
+                elif data == "TASK":
+                    pyautogui.hotkey('ctrl', 'shift', 'esc', interval=0.1)
+        
 
         # cleanup
         if SERIAL_CONN and SERIAL_CONN.is_open:
@@ -95,12 +106,12 @@ def listen_serial(port):
         window.after(0, lambda: update_status_images(False))
 
     except serial.SerialException as e:
-        print("[SerialException]", e)
+        print(f"[SerialException] {e}")
         window.after(0, lambda: messagebox.showerror("Connection Error", f"Could not connect to {port}\n\n{e}"))
         STATUS = False
         window.after(0, lambda: update_status_images(False))
     except Exception as e:
-        print("[Error]", e)
+        print(f"[Error] {e}")
         window.after(0, lambda: messagebox.showerror("Error", str(e)))
         STATUS = False
         window.after(0, lambda: update_status_images(False))
@@ -125,6 +136,11 @@ def start_button_clicked():
         update_status_images(True)
         SERIAL_THREAD = threading.Thread(target=listen_serial, args=(port_input,), daemon=True)
         SERIAL_THREAD.start()
+
+        # Place the serial/output text box and scrollbar now
+        serial_text.place(x=525, y=540, width=420, height=110)
+        scrollbar.place(x=945, y=540, height=110)
+
     else:
         messagebox.showinfo("Info", "Already connected.")
 
@@ -138,21 +154,21 @@ def stop_button_clicked():
         except:
             pass
         update_status_images(False)
-        messagebox.showinfo("Disconnected", "Serial connection closed.")
+        print("Disconnected from serial.")
     else:
-        messagebox.showinfo("Info", "Already disconnected.")
+        print("Already disconnected.")
 
 def update_status_images(online=False):
     if online:
         canvas.itemconfig(image_4, state="normal")
         canvas.itemconfig(image_5, state="hidden")
         button_1.place_forget()
-        button_2.place(x=613.0, y=450.0, width=213.09805297851562, height=63.0)
+        button_2.place(x=613.0, y=450.0, width=213.098, height=63.0)
     else:
         canvas.itemconfig(image_4, state="hidden")
         canvas.itemconfig(image_5, state="normal")
         button_2.place_forget()
-        button_1.place(x=613.0, y=450.0, width=213.09805297851562, height=63.0)
+        button_1.place(x=613.0, y=450.0, width=213.098, height=63.0)
 
 # ---------------- UI SETUP ----------------
 lock_socket = check_already_running()  # ensure single instance
@@ -190,10 +206,10 @@ canvas.create_rectangle(473.0, 63.0, 478.0, 645.0, fill="#FFFFFF", outline="")
 canvas.create_text(535.0, 204.0, anchor="nw", text="STATUS", fill="#FFFFFF", font=("Poppins Bold", 24 * -1))
 
 image_image_4 = PhotoImage(file=relative_to_assets("image_4.png"))  # Online
-image_4 = canvas.create_image(709.739990234375, 224.64785766601562, image=image_image_4)
+image_4 = canvas.create_image(709.739, 224.647, image=image_image_4)
 
 image_image_5 = PhotoImage(file=relative_to_assets("image_5.png"))  # Offline
-image_5 = canvas.create_image(709.739990234375, 222.64785766601562, image=image_image_5)
+image_5 = canvas.create_image(709.739, 222.647, image=image_image_5)
 
 image_image_6 = PhotoImage(file=relative_to_assets("image_6.png"))
 image_6 = canvas.create_image(720.0, 348.0, image=image_image_6)
@@ -209,11 +225,33 @@ canvas.create_text(559.0, 288.0, anchor="nw", text="PORT:", fill="#FFFFFF", font
 
 button_image_1 = PhotoImage(file=relative_to_assets("button_1.png"))
 button_1 = Button(image=button_image_1, borderwidth=0, highlightthickness=0, command=start_button_clicked, relief="flat")
-button_1.place(x=613.0, y=450.0, width=213.09805297851562, height=63.0)
+button_1.place(x=613.0, y=450.0, width=213.098, height=63.0)
 
 button_image_2 = PhotoImage(file=relative_to_assets("button_2.png"))
 button_2 = Button(image=button_image_2, borderwidth=0, highlightthickness=0, command=stop_button_clicked, relief="flat")
 
-update_status_images(False)
+# ---------------- SERIAL OUTPUT TEXT BOX WITH SCROLLBAR (Initially Hidden) ----------------
+serial_text = Text(window, bg="#F0F0F0", fg="#000000", font=("Courier", 12), state=DISABLED)
+scrollbar = Scrollbar(window, command=serial_text.yview)
+serial_text.configure(yscrollcommand=scrollbar.set)
+# Do NOT place them yet; will appear after pressing Start
 
+# ---------------- REDIRECT PRINT TO TEXT BOX ----------------
+class StdoutRedirector:
+    def __init__(self, text_widget):
+        self.text_widget = text_widget
+
+    def write(self, message):
+        self.text_widget.config(state=NORMAL)
+        self.text_widget.insert(END, message)
+        self.text_widget.see(END)
+        self.text_widget.config(state=DISABLED)
+
+    def flush(self):
+        pass
+
+sys.stdout = StdoutRedirector(serial_text)
+sys.stderr = StdoutRedirector(serial_text)  # also capture errors
+
+update_status_images(False)
 window.mainloop()
