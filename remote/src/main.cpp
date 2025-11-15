@@ -2,8 +2,11 @@
 #include <IRremote.h>
 
 #define IR_PIN 3
-#define POWER_LED 10   // any free pin
+#define POWER_LED 10
 #define SIGNAL_LED 12
+
+unsigned long signalLedTimer = 0;
+const unsigned long signalLedDuration = 100; // LED blink duration
 
 void setup() {
   pinMode(POWER_LED, OUTPUT); // Green (POWER MODE)
@@ -19,56 +22,36 @@ void setup() {
 void loop() {
   if (IrReceiver.decode()) {
     uint8_t cmd = IrReceiver.decodedIRData.command;
+    uint8_t flags = IrReceiver.decodedIRData.flags;
 
-    // Ignore repeat and noise signals
-    if (IrReceiver.decodedIRData.flags != IRDATA_FLAGS_IS_REPEAT && cmd != 0) {
-      // Serial.print("Command: ");
-      // Serial.print(cmd, HEX);
-      // Serial.print(" → ");
-
-      // ---- Command Mappings ----
-      if (cmd == 0x5A) {             // Example command for NEXT
-        Serial.println("NEXT");
-      } 
-      else if (cmd == 0x8) {        // Example command for BACK
-        Serial.println("PREVIOUS");
-      } 
-      else if (cmd == 0x45) {        // Example command for PLAY/PAUSE
-        Serial.println("START");
-      } 
-      else if (cmd == 0x46) {        // Example command for STOP
-        Serial.println("END");
-      } 
-      else if (cmd == 0x47) {        // Example command for POWER OFF
-        Serial.println("BLACK");
-      } else if (cmd == 0x44) {        // Example command for VOLUME UP
-        Serial.println("WHITE");
-      } else if (cmd == 0x18) {        // Example command for VOLUME DOWN
-        Serial.println("UP");
-      } else if (cmd == 0x52) {        // Example command for MUTE
-        Serial.println("DOWN");
-      } else if (cmd == 0x1C) {         // Example command for MENU
-        Serial.println("APP");
-      }
-      else if (cmd == 0x19){
-        Serial.println("PAUSE");
-      }
-      else if (cmd == 0x16) {
-        Serial.println("EXIT");
-      }
-      else if (cmd == 0xD) {
-        Serial.println("TASK");
-      }
-      else {
-        Serial.println("UNKNOWN");
+    // Only process if it's NOT a repeat and command is valid
+    if (cmd != 0 && !(flags & IRDATA_FLAGS_IS_REPEAT)) {
+      switch(cmd) {
+        case 0x5A: Serial.println("NEXT"); break;
+        case 0x08: Serial.println("PREVIOUS"); break;
+        case 0x45: Serial.println("START"); break;
+        case 0x46: Serial.println("END"); break;
+        case 0x47: Serial.println("BLACK"); break;
+        case 0x44: Serial.println("WHITE"); break;
+        case 0x18: Serial.println("UP"); break;
+        case 0x52: Serial.println("DOWN"); break;
+        case 0x1C: Serial.println("APP"); break;
+        case 0x19: Serial.println("PAUSE"); break;
+        case 0x16: Serial.println("EXIT"); break;
+        case 0x0D: Serial.println("TASK"); break;
+        default: Serial.println("UNKNOWN"); break;
       }
 
       // Blink signal LED
       digitalWrite(SIGNAL_LED, HIGH);
-      delay(150);
-      digitalWrite(SIGNAL_LED, LOW);
+      signalLedTimer = millis();
     }
 
     IrReceiver.resume(); // Ready for next signal
+  }
+
+  // Turn off LED after duration
+  if (digitalRead(SIGNAL_LED) == HIGH && millis() - signalLedTimer >= signalLedDuration) {
+    digitalWrite(SIGNAL_LED, LOW);
   }
 }
