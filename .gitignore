@@ -2,3 +2,5 @@ build/dist
 build/gui.spec
 build/build
 Output
+
+find-port/*
